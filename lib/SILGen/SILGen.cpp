@@ -781,7 +781,8 @@ void SILGenModule::postEmitFunction(SILDeclRef constant,
                "all functions with generic signatures");
         AutoDiffConfig config(diffAttr->getParameterIndices(), resultIndices,
                               diffAttr->getDerivativeGenericSignature());
-        emitDifferentiabilityWitness(AFD, F, config, jvp, vjp, diffAttr);
+        emitDifferentiabilityWitness(AFD, F, config, jvp, vjp, diffAttr,
+                                     F->getLinkage());
       }
       for (auto *derivAttr : Attrs.getAttributes<DerivativeAttr>()) {
         SILFunction *jvp = nullptr;
@@ -801,7 +802,7 @@ void SILGenModule::postEmitFunction(SILDeclRef constant,
         AutoDiffConfig config(derivAttr->getParameterIndices(), resultIndices,
                               derivativeGenSig);
         emitDifferentiabilityWitness(origAFD, origFn, config, jvp, vjp,
-                                     derivAttr);
+                                     derivAttr, F->getLinkage());
       }
     };
     if (auto *accessor = dyn_cast<AccessorDecl>(AFD))
@@ -815,7 +816,7 @@ void SILGenModule::postEmitFunction(SILDeclRef constant,
 void SILGenModule::emitDifferentiabilityWitness(
     AbstractFunctionDecl *originalAFD, SILFunction *originalFunction,
     const AutoDiffConfig &config, SILFunction *jvp, SILFunction *vjp,
-    const DeclAttribute *attr) {
+    const DeclAttribute *attr, SILLinkage witnessLinkage) {
   assert(isa<DifferentiableAttr>(attr) || isa<DerivativeAttr>(attr));
   auto *origFnType = originalAFD->getInterfaceType()->castTo<AnyFunctionType>();
   auto origSilFnType = originalFunction->getLoweredFunctionType();
@@ -854,12 +855,14 @@ void SILGenModule::emitDifferentiabilityWitness(
   auto *diffWitness = M.lookUpDifferentiabilityWitness(key);
   if (!diffWitness) {
     diffWitness = SILDifferentiabilityWitness::createDefinition(
-        M, originalFunction->getLinkage(), originalFunction,
-        silConfig.parameterIndices, silConfig.resultIndices,
-        config.derivativeGenericSignature, /*jvp*/ nullptr, /*vjp*/ nullptr,
+        M, witnessLinkage, originalFunction, silConfig.parameterIndices,
+        silConfig.resultIndices, config.derivativeGenericSignature,
+        /*jvp*/ nullptr, /*vjp*/ nullptr,
         /*isSerialized*/ hasPublicVisibility(originalFunction->getLinkage()),
         attr);
   }
+  assert(diffWitness->getLinkage() == witnessLinkage &&
+         "sema should diagnose incompatible witness linkage");
 
   // Set derivative function in differentiability witness.
   auto setDerivativeInDifferentiabilityWitness =

@@ -3867,15 +3867,6 @@ void AttributeChecker::visitDerivativeAttr(DerivativeAttr *attr) {
     return;
   }
 
-  // Reject different-file retroactive derivatives.
-  // TODO(TF-136): Lift this restriction now that SIL differentiability witness
-  // infrastructure is ready.
-  if (originalAFD->getParentSourceFile() != derivative->getParentSourceFile()) {
-    diagnoseAndRemoveAttr(attr,
-                          diag::derivative_attr_not_in_same_file_as_original);
-    return;
-  }
-
   // Reject duplicate `@derivative` attributes.
   auto insertion = Ctx.DerivativeAttrs.try_emplace(
       {originalAFD, checkedWrtParamIndices, kind}, attr);
